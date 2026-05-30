@@ -5,35 +5,46 @@ permissions:
 
 on:
   schedule:
-    - cron: "0 0 * * *" # every day
-  workflow_dispatch:
+    - cron: "0 0 * * *" # 每天 UTC 00:00 自动运行
+  workflow_dispatch: # 支持手动触发
 
 jobs:
   sync_latest_from_upstream:
     name: Sync latest commits from upstream repo
     runs-on: ubuntu-latest
-    if: ${{ github.event.repository.fork }}
 
     steps:
-      # Step 1: run a standard checkout action
+      # Step 1: 检出代码
       - name: Checkout target repo
         uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 2: run the sync action
-      - name: Sync upstream changes
+      # Step 2: 同步 main 分支
+      - name: Sync upstream changes to main
         id: sync
         uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
         with:
           upstream_sync_repo: tangly1024/NotionNext
           upstream_sync_branch: main
           target_sync_branch: main
-          target_repo_token: ${{ secrets.GITHUB_TOKEN }} # automatically generated, no need to set
-
-          # Set test_mode true to run tests instead of the true action!!
+          target_repo_token: ${{ secrets.GITHUB_TOKEN }}
           test_mode: false
+
+      # Step 3: 同步完成后，将 main 强制同步到 wiki 分支
+      - name: Sync main to wiki branch
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git branch -f wiki origin/main
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git wiki --force
 
       - name: Sync check
         if: failure()
         run: |
-          echo "[Error] 由于上游仓库的 workflow 文件变更，导致 GitHub 自动暂停了本次自动更新，你需要手动 Sync Fork 一次。"
+          echo "[Error] 由于上游仓库 workflow 文件变更，导致自动同步暂停，需要手动 Sync Fork 一次。"
           exit 1
