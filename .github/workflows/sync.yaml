@@ -10,11 +10,10 @@ on:
 
 jobs:
   sync_latest_from_upstream:
-    name: Sync latest commits from upstream repo
+    name: Sync upstream and merge to main
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: 检出代码
       - name: Checkout target repo
         uses: actions/checkout@v4
         with:
@@ -22,29 +21,58 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 2: 同步 main 分支
-      - name: Sync upstream changes to main
-        id: sync
-        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4
-        with:
-          upstream_sync_repo: tangly1024/NotionNext
-          upstream_sync_branch: main
-          target_sync_branch: main
-          target_repo_token: ${{ secrets.GITHUB_TOKEN }}
-          test_mode: false
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/tangly1024/NotionNext.git
+          git fetch upstream
 
-      # Step 3: 同步完成后，将 main 强制同步到 wiki 分支
-      - name: Sync main to wiki branch
-        if: success()
+      - name: Create/update upstream branch (pure upstream code)
+        run: |
+          git branch -f upstream upstream/main
+          git push origin upstream --force
+
+      - name: Merge upstream into main (keep your custom changes)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
+          
+          # 将 upstream/main 合并到 main
+          # 你的自定义修改不会被覆盖，只会合并上游的新代码
+          # 如果有冲突，会暂停并报错，需要你手动解决
+          git merge upstream/main --no-edit || echo "CONFLICT_DETECTED=true" >> $GITHUB_ENV
+
+      - name: Push main
+        if: success()
+        run: |
+          git push origin main
+
+      - name: Sync wiki branch (mirror of main)
+        if: success()
+        run: |
           git branch -f wiki origin/main
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git wiki --force
+          git push origin wiki --force
+
+      - name: Push tags
+        if: success()
+        run: git push --tags
+
+      - name: Push upstream branch
+        if: success()
+        run: git push origin upstream --force
+
+      - name: Conflict detected notification
+        if: env.CONFLICT_DETECTED == 'true'
+        run: |
+          echo "::error::合并冲突！请手动解决 main 分支的冲突"
+          echo "操作步骤："
+          echo "1. git checkout main"
+          echo "2. git merge upstream/main"
+          echo "3. 解决冲突后 git add . && git commit"
+          echo "4. git push origin main"
+          exit 1
 
       - name: Sync check
-        if: failure()
+        if: failure() && env.CONFLICT_DETECTED != 'true'
         run: |
-          echo "[Error] 由于上游仓库 workflow 文件变更，导致自动同步暂停，需要手动 Sync Fork 一次。"
+          echo "[Error] 同步失败，需要手动处理"
           exit 1
