@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout target repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
@@ -23,7 +23,7 @@ jobs:
 
       - name: Add upstream remote
         run: |
-          git remote add upstream https://github.com/tangly1024/NotionNext.git
+          git remote add upstream https://github.com/notionnext-org/NotionNext.git
           git fetch upstream
 
       - name: Create/update upstream branch (pure upstream code)
@@ -35,7 +35,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          
+
           # 将 upstream/main 合并到 main
           # 你的自定义修改不会被覆盖，只会合并上游的新代码
           # 如果有冲突，会暂停并报错，需要你手动解决
